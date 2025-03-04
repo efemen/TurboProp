@@ -13,7 +13,7 @@ import time
 from matplotlib.widgets import Button
 import matplotlib.pyplot as plt
 import sys
-from pymodbus.client.sync import ModbusTcpClient
+from pymodbus.client import ModbusTcpClient
 
 
 class wind_tunnel():
@@ -38,7 +38,7 @@ class wind_tunnel():
             self.client.write_register(write_address, write_data)
     
     def stop(self):
-        write_address = 1
+        write_address = 0
         write_data = 0
         self.client.write_register(write_address, write_data)
     
