@@ -14,14 +14,26 @@ from matplotlib.widgets import Button
 import matplotlib.pyplot as plt
 import sys
 from pymodbus.client import ModbusTcpClient
+from datetime import datetime
+import os
+import scipy.io as io
 
 
 class wind_tunnel():
     def __init__(self, ip = '192.168.0.10', port = 502):
         self.ip = ip
         self.port = port
-        self.client = ModbusTcpClient(ip, port)
+        self.client = ModbusTcpClient(ip, port = port)
         self.fit = [2.0882, -4.1089]
+
+    def set_fan_speed(self, v):
+        if v > 30:
+            raise ValueError('Do not set the fan speed to > 30%.')
+        
+        write_address = 0
+        write_data = int(v * 10)
+        self.client.write_register(write_address, write_data)
+
     
     def set_U0(self, u):
         if u == 0:
@@ -29,7 +41,7 @@ class wind_tunnel():
         else:
             v = round(self.fit[0] * u + self.fit[1], 1)
         
-        write_address = 1
+        write_address = 0
         write_data = int(v * 10)
         
         if v > 96:
@@ -41,11 +53,25 @@ class wind_tunnel():
         write_address = 0
         write_data = 0
         self.client.write_register(write_address, write_data)
-    
+
+    def read_PLC(self):
+        N = 10
+        T0 = np.zeros((N, 1))
+        P0 = np.zeros((N, 1))
+
+        for i in range(N):
+            data = self.client.read_input_registers(address=0, count=16)
+            T0[i] = data.registers[8] / 10
+            P0[i] = data.registers[4] / 10
+        T_mean = np.mean(T0)
+        P_mean = np.mean(P0)
+
+        return T_mean, P_mean
+
     def close(self):
         self.client.close()
 
-class analog_reader():
+class analog_force_reader():
     """
     A class to represent a force sensor using NI-DAQmx.
     Attributes
@@ -71,7 +97,7 @@ class analog_reader():
 
     def __init__(self, fs_rate=4000, buffer_size=100):
         self.task = nidaqmx.Task()
-        self.task.ai_channels.add_ai_voltage_chan("Dev1/ai1:7")  # ATI Mini40 Force/Torque Sensor has 6 channels and the encoder
+        self.task.ai_channels.add_ai_voltage_chan("Dev4/ai1:7", min_val=-10.0, max_val=10.0)  # ATI Mini40 Force/Torque Sensor has 6 channels and the encoder
         self.task.timing.cfg_samp_clk_timing(rate=fs_rate, sample_mode=constants.AcquisitionType.CONTINUOUS,
                                         samps_per_chan=buffer_size)
         self.stream = AnalogMultiChannelReader(self.task.in_stream)
@@ -91,11 +117,30 @@ class analog_reader():
     def raw2force(self, raw):
         # raw is a 6x1 numpy array
         # Conversion from voltage to force in Newtons
-
         return self.cal_matrix @ raw
 
-    def raws2force(self, raws):
-        return np.matmul(self.cal_matrix, raws)
+
+    def stop(self):
+        self.task.stop()
+        self.task.close()
+
+
+class analog_mano_reader():
+
+    def __init__(self, fs_rate=4000, buffer_size=4000):
+        self.task = nidaqmx.Task()
+        self.task.ai_channels.add_ai_voltage_chan("Dev2/ai0:1", min_val = -5.0 , max_val = 5.0)
+        self.task.timing.cfg_samp_clk_timing(rate=fs_rate, sample_mode=constants.AcquisitionType.CONTINUOUS,
+                                        samps_per_chan=buffer_size)
+        self.stream = AnalogMultiChannelReader(self.task.in_stream)
+    
+    def start(self):
+        self.task.start()
+
+    def mano2pressure(self, raw):
+        # raw is a 2x1 numpy array
+        # Conversion from voltage to pressure in Pascals
+        return 200 * raw
 
     def stop(self):
         self.task.stop()
@@ -122,7 +167,7 @@ class esc():
     def __init__(self):
         self.task = nidaqmx.Task()
         self.task.co_channels.add_co_pulse_chan_freq(
-            "Dev1/ctr0", idle_state=Level.LOW, initial_delay=0.0,  # By default this is PFI12, which corresponds to pin 38 (P.2.4) on NI-USB-6212
+            "Dev4/ctr0", idle_state=Level.LOW, initial_delay=0.0,  # By default this is PFI12, which corresponds to pin 38 (P.2.4) on NI-USB-6212
             freq=50.0, duty_cycle=0.05  # Start at 0°
         )
         self.task.timing.cfg_implicit_timing(sample_mode=AcquisitionType.CONTINUOUS)
@@ -211,18 +256,19 @@ class PID_Controller():
         self.integral = 0
 
 class indi_controller():
-    def __init__(self, kp):
+    def __init__(self, kp, min_output = 0, max_output = 1):
         self.kp = kp # Proportional gain
         self.command = 0 # Desired setpoint value
         self.u = 0 # Control output
-        self.min_output = 0
-        self.max_output = 1
+        self.min_output = min_output
+        self.max_output = max_output
     
     def set_command(self, command):
         self.command = command
 
     def update(self, feedback):
         error = self.command - feedback # Error value
+        self.error = error
         output = self.u + self.kp * error # Control output
         self.u = self.clip(output)  # Update the control output
         return self.clip(output) # Return the control output
@@ -237,11 +283,35 @@ def ask_user(in_string):
     running = False
 
 
+# def estimate_rpm(signal, Fs):
+#     # Find indices where the signal transitions from low to high (rising edges)
+#     # rising_edges = np.where((signal[:-1] < 3.5) & (signal[1:] >= 3.5))[0] + 1
+#     time_arr = np.linspace(0, len(signal) / Fs, len(signal))
+#     threshold = 2 # V
+#     indices = np.where(np.diff(signal) > threshold)[0]
+    
+#     if len(indices) < 2:
+#         return 0
+    
+#     min_gap = 1  # Adjust based on your data (e.g., number of samples)
+#     filtered_indices = indices[np.insert(np.diff(indices) > min_gap, 0, True)]
+
+#     rising_edges = time_arr[filtered_indices]
+
+#     # Compute time differences between rising edges
+#     time_diff = np.diff(rising_edges)[-1]
+
+#     # Compute average time between rising edges
+#     # avg_time = np.mean(time_diffs)
+#     rpm = 60 / time_diff
+#     return rpm
+
+
 def estimate_rpm(signal, Fs):
     # Find indices where the signal transitions from low to high (rising edges)
-    # rising_edges = np.where((signal[:-1] < 3.5) & (signal[1:] >= 3.5))[0] + 1
     time_arr = np.linspace(0, len(signal) / Fs, len(signal))
-    threshold = 2 # V
+    threshold = 1 # V
+    signal = np.where(signal > threshold, 5, signal)
     indices = np.where(np.diff(signal) > threshold)[0]
     
     if len(indices) < 2:
@@ -349,4 +419,26 @@ def plot_exp_input(t_arr, J, rpm_sweep):
     btn_term.on_clicked(terminate)
 
     plt.show()
+
+class cal_matrix():
+    def __init__(self):
+            self.cal_matrix = np.array([
+            [0.00371,  -0.02167,   0.00473,   3.15117,   0.02060,  -3.17213], # ATI Mini 40 IP66 calibration matrix SOTON BLWT, 12/02/2025
+            [0.00433,  -3.79734,  -0.01068,   1.75137,  -0.00602,   1.87770], 
+            [5.14105,  -0.08149,   5.23352,  -0.13159,   5.39405,  -0.12217],
+            [-0.00134,  -0.04024,   0.07490,   0.01583,  -0.07733,   0.02243], 
+            [-0.08373,   0.00302,   0.04110,  -0.03512,   0.04666,   0.03224],
+            [0.00106,  -0.04752,   0.00002,  -0.04370,  -0.00002,  -0.04564]])
+        
+    def voltage2force(self, raw):
+        # raw is a 6x1 numpy array
+        # Conversion from voltage to force in Newtons
+        return self.cal_matrix @ raw
+    
+def get_latest_file():
+    folder_path = "bias"
+    
+    files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if os.path.isfile(os.path.join(folder_path, f))]
+    latest_file = max(files, key=os.path.getctime)
+    return latest_file
 
