@@ -6,7 +6,7 @@ from datetime import datetime
 # def read_bias(prop_name):
 #------------------------------ File Variables -----------------------------#
 
-prop_name = "APC_10x5"
+prop_name = "APC_10x10"
 current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
 filename = prop_name + "_bias" + "_" + current_time + ".mat"
 
@@ -29,12 +29,13 @@ t_arr = np.zeros((1, 1))
 
 buffer_in_size = Fs_analog // Fs_control 
 # buff_t_arr = np.linspace(0, buffer_in_size/Fs_analog, buffer_in_size)
-channels = 7
+channels = 8
 
 buffer_in = np.zeros((1, buffer_in_size))
 data = np.zeros((channels, 1)) 
 
-
+print("Starting bias measurement...")
+# ----------------------------- Acquisition ----------------------------- #
 analog_in = analog_force_reader(fs_rate= Fs_analog, buffer_size=buffer_in_size)
 
 
@@ -59,7 +60,9 @@ analog_in.task.register_every_n_samples_acquired_into_buffer_event(buffer_in_siz
 start_time = time.perf_counter()
 analog_in.start()
 running = True
-
+esc_1 = esc()
+esc_1.start()
+time.sleep(2)
 
 try:
     while t < duration:
@@ -80,9 +83,12 @@ except KeyboardInterrupt:
 
 finally:
     print("Task stopped.")
+    esc_1.stop()
     running = False
 
+
 analog_in.stop()
+
 
 force_raw = analog_in.raw2force(data[0:6, :]).T
 

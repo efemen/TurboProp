@@ -7,24 +7,25 @@ import matplotlib.pyplot as plt
 
 #------------------------------ Experiment Variables -----------------------------#
 WT = wind_tunnel()
-U_inf = 6 # m/s
+# U_inf = 6 # m/s
+RPM = 6000
 
 print("Reading WT temperature and pressure...")
 temperature, pressure = WT.read_PLC()
 humidty = 0.71 # Relative humidity
 
 rho = air_density(temperature, pressure, humidty) * 100 # Air density
-q_target = 0.5 * rho * U_inf**2
-print("Target q = ", str(q_target))
+# q_target = 0.5 * rho * U_inf**2
+# print("Target q = ", str(q_target))
 
 D_inch = 10 # Propeller Diameter
 D_m = D_inch * 0.0254 # Propeller diameter in meters
 pitch = 5 # Propeller Pitch
 
-num_ops = 4 # Number of operating points to be tested
-J_min = 0.3
-J_max = 0.45
-station_time = 40 # seconds per operating point
+num_ops = 6 # Number of operating points to be tested
+J_min = 0.2
+J_max = 0.32
+station_time = 30 # seconds per operating point
 
 #------------------------------ File Variables -----------------------------#
 prop_name = str(D_inch) + "x" + str(pitch)
@@ -32,7 +33,8 @@ current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
 file_name = prop_name + "_J_" + str(J_min) + "_" + str(J_max) + "_" + current_time + ".mat"
 
 
-bias_file = get_latest_file()
+# bias_file = get_latest_file()
+bias_file = run_bias()
 print("Bias file: ", bias_file)
 bias_data = io.loadmat(bias_file)
 bias_mean = bias_data["mean_force"]
@@ -40,54 +42,61 @@ bias_mean = bias_data["mean_force"]
 t = 0
 datapoint = 0
 Fs_analog = 20000 # Hz
-Fs_control = 30 # Hz
+Fs_control = 20 # Hz
 Fs_mano = 1000 # Hz
 
 dt_control = 1/Fs_control
 duration = num_ops * station_time # seconds
 N = Fs_control * duration
+N_analog = Fs_analog * duration
+N_mano = Fs_mano * duration
 
-# description = "Propeller " + prop_name + " J sweep from " + str(J_min) + " to " +  str(J_max) + " "+ str(duration) + " seconds."
-description = "Trying double DAQ setup to control the WT speed in real time."
+description = "Propeller " + prop_name + " J sweep from " + str(J_min) + " to " +  str(J_max) + " "+ str(duration) + " seconds."
+# description = "Only weight."
 
 # ----------------------------- Init Arrays ----------------------------- #
 
 t_arr = np.zeros((1, 1))
 
-J_sweep = (np.repeat(np.linspace(J_min, J_max, num_ops), N//num_ops)) # Advance ratio sweep
-rpm_sweep = J2RPM(J_sweep, U_inf, D_m) # RPM sweep
+J_sweep = np.flip(np.repeat(np.linspace(J_min, J_max, num_ops), N//num_ops)) # Advance ratio sweep
+# rpm_sweep = J2RPM(J_sweep, U_inf, D_m) # RPM sweep
+airspeed_sweep = J2U(J_sweep, RPM, D_m) # Airspeed sweep
 
-rpm_commands = rpm_sweep
-rpm_command = rpm_commands[0]
+rpm_command = RPM
 
 rpms = np.zeros((1, 1))
 
 buffer_in_size_force = 1000
 buffer_in_size_mano = 100
 
-channels_force = 7
+channels_force = 8
 channels_mano = 2
+
+last_index_force = 0
+last_index_mano = 0
 
 buffer_in_force = np.zeros((1, buffer_in_size_force))
 buffer_in_mano = np.zeros((1, buffer_in_size_mano))
 
-data_force_daq = np.zeros((channels_force, 1)) 
-data_mano_daq = np.zeros((channels_mano, 1))
+# data_force_daq = np.zeros((channels_force, 1)) 
+# data_mano_daq = np.zeros((channels_mano, 1))
+
+data_force_daq = np.zeros((channels_force, int(N_analog * 1.05))) 
+data_mano_daq = np.zeros((channels_mano, int(N_mano * 1.05)))
 
 # ----------------------------- Controller  ----------------------------- #
 
-kp_indi = 5e-6 # APC 10x5
+kp_indi = 4e-6 # APC 10x5
 controller = indi_controller(kp_indi)
 
-kp_tunnel = 1e-2
+kp_tunnel = 2e-2
 wt_controller = indi_controller(kp_tunnel, min_output = 0, max_output = 20)
-wt_controller.u = round(WT.fit[0] * U_inf + WT.fit[1], 1)
 
 # ----------------------------- Filter  ----------------------------- #
 
 dt = 1/Fs_control
 order = 2
-cutoff = 10
+cutoff = 5
 nyq = 0.5 * Fs_control
 normal_cutoff = cutoff / nyq
 
@@ -96,18 +105,24 @@ z_l = z_d = signal.lfilter_zi(b, a)
 
 
 # #------------------------------ Define equipment classes -----------------------------#
-plot_exp_input(np.linspace(0, duration, N), J_sweep, rpm_sweep)
+# plot_exp_input_rpm(np.linspace(0, duration, N), J_sweep, rpm_sweep)
+plot_exp_input_airspeed(np.linspace(0, duration, N), J_sweep, airspeed_sweep)
 
 
 esc_1 = esc()
 esc_1.start()
 
-WT.set_U0(U_inf)
+# WT.set_U0(U_inf)
+# wt_controller.u = round(WT.fit[0] * U_inf + WT.fit[1], 1)
+
+WT.set_fan_speed(17.5)
+wt_controller.u = 17.5
+
 print("Wind tunnel starting...")
 time.sleep(40)
 
 print("Throttling up...")
-esc_1.write_throttle(0.3)
+esc_1.write_throttle(0.1)
 print("Working RPM set.")
 time.sleep(3)
 
@@ -117,6 +132,7 @@ analog_mano_in = analog_mano_reader(fs_rate= Fs_mano, buffer_size=buffer_in_size
 def reading_task_callback_force(task_idx, event_type, num_samples, callback_data):  # bufsize_callback is passed to num_samples
     global data_force_daq
     global buffer_in_force
+    global last_index_force
 
     if running:
         # It may be wiser to read slightly more than num_samples here, to make sure one does not miss any sample,
@@ -124,7 +140,9 @@ def reading_task_callback_force(task_idx, event_type, num_samples, callback_data
         buffer_in_force = np.zeros((channels_force, num_samples)) 
         analog_force_in.stream.read_many_sample(buffer_in_force, num_samples, timeout=constants.WAIT_INFINITELY)
 
-        data_force_daq = np.append(data_force_daq, buffer_in_force, axis=1)  # appends buffered data to total variable data
+        # data_force_daq = np.append(data_force_daq, buffer_in_force, axis=1)  # appends buffered data to total variable data
+        data_force_daq[:, last_index_force:last_index_force + num_samples] = buffer_in_force
+        last_index_force += num_samples
 
     return 0  # Absolutely needed for this callback to be well defined (see nidaqmx doc).
 
@@ -132,6 +150,7 @@ def reading_task_callback_force(task_idx, event_type, num_samples, callback_data
 def reading_task_callback_mano(task_idx, event_type, num_samples, callback_data):  # bufsize_callback is passed to num_samples
     global data_mano_daq
     global buffer_in_mano
+    global last_index_mano
 
     if running:
         # It may be wiser to read slightly more than num_samples here, to make sure one does not miss any sample,
@@ -139,7 +158,9 @@ def reading_task_callback_mano(task_idx, event_type, num_samples, callback_data)
         buffer_in_mano = np.zeros((channels_mano, num_samples)) 
         analog_mano_in.stream.read_many_sample(buffer_in_mano, num_samples, timeout=constants.WAIT_INFINITELY)
 
-        data_mano_daq = np.append(data_mano_daq, buffer_in_mano, axis=1)  # appends buffered data to total variable data
+        # data_mano_daq = np.append(data_mano_daq, buffer_in_mano, axis=1)  # appends buffered data to total variable data
+        data_mano_daq[:, last_index_mano:last_index_mano + num_samples] = buffer_in_mano
+        last_index_mano += num_samples
 
     return 0  # Absolutely needed for this callback to be well defined (see nidaqmx doc).
 
@@ -155,7 +176,7 @@ analog_mano_in.start()
 running = True
 
 controller.set_command(rpm_command)
-wt_controller.set_command(q_target)
+wt_controller.set_command(0)
 
 try:
     while t < duration:
@@ -174,13 +195,13 @@ try:
         esc_1.write_throttle(throttle_command)
 
         # WT control
-        if datapoint % 10 == 0:
-            q = np.mean(data_mano_daq[1, -100:]) * 200
+        if datapoint % 2  == 0 and datapoint > 2:
+            # q = np.mean(data_mano_daq[1, -100:]) * 200
+            q = np.mean(data_mano_daq[1, data_mano_daq[1, :] != 0][-10:]) * 200
             wt_command = wt_controller.update(q)
-            WT.set_fan_speed(round(wt_command, 1))
-            print(wt_command, wt_controller.error)
-
-        # print("RPM: ", rpms[datapoint], "Throttle: ", throttle_command)
+            WT.set_fan_speed(round(wt_command, 2))
+            print(1/np.mean(np.diff(t_arr[-9:-3])), q, wt_controller.error)
+            # print("RPM: ", rpms[datapoint], "Error: ", controller.error, "Throttle: ", throttle_command)
 
         datapoint += 1
         if datapoint >= N:
@@ -210,12 +231,13 @@ force_raw = analog_force_in.raw2force(data_force_daq[0:6, :]).T
 import matplotlib.pyplot as plt
 fig, ax = plt.subplots()
 
-
-# ax.plot(data[5, :].T, ".-")
 ax.plot(t_arr, rpms, ".-")
+plt.grid()
+plt.xlabel("Time [s]")
+plt.ylabel("RPM")
 plt.show()
 
-io.savemat("results/double_daq/" + prop_name + "/" + file_name, 
+io.savemat("results/" + prop_name + "/" + file_name, 
             {"t": t_arr, 
                 "data": data_force_daq.T,
                 "data_mano": data_mano_daq.T,

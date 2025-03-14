@@ -97,7 +97,7 @@ class analog_force_reader():
 
     def __init__(self, fs_rate=4000, buffer_size=100):
         self.task = nidaqmx.Task()
-        self.task.ai_channels.add_ai_voltage_chan("Dev4/ai1:7", min_val=-10.0, max_val=10.0)  # ATI Mini40 Force/Torque Sensor has 6 channels and the encoder
+        self.task.ai_channels.add_ai_voltage_chan("Dev4/ai0:7", min_val=-10.0, max_val=10.0)  # ATI Mini40 Force/Torque Sensor has 6 channels and the encoder
         self.task.timing.cfg_samp_clk_timing(rate=fs_rate, sample_mode=constants.AcquisitionType.CONTINUOUS,
                                         samps_per_chan=buffer_size)
         self.stream = AnalogMultiChannelReader(self.task.in_stream)
@@ -340,6 +340,11 @@ def RPM2J(RPM, V, D):
     J = V / (n * D)
     return J 
 
+def J2U(J, RPM, D):
+    n = RPM / 60
+    V = J * n * D
+    return V
+
 def air_density(T, P, humidity):
     """
     Calculate the air density using temperature, pressure, and humidity.
@@ -368,8 +373,57 @@ def air_density(T, P, humidity):
     density = (P_dry / (R_specific * T_kelvin)) + (e / (R_vapor * T_kelvin))
     return density
 
+def plot_exp_input_airspeed(t_arr, J, airspeed_sweep):
+    fig, ax1 = plt.subplots(figsize=(12, 6))
 
-def plot_exp_input(t_arr, J, rpm_sweep):
+    color = 'tab:blue'
+    ax1.set_xlabel('Time (s)')
+    ax1.set_ylabel('Advance Ratio (J)', color=color)
+    ax1.plot(t_arr, J, '-', color=color, linewidth=2)
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+    color = 'tab:green'
+    ax2.set_ylabel('Airspeed (m/s)', color=color)  # we already handled the x-label with ax1
+    ax2.plot(t_arr, airspeed_sweep, '-', color=color, linewidth=2)
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    fig.tight_layout()  # otherwise the right y-label is slightly clipped
+    plt.title('Airspeed and Advance Ratio vs Time')
+    plt.grid()
+
+    # Add buttons
+    ax_ack = plt.axes([0.6, 0.05, 0.1, 0.075])
+    ax_term = plt.axes([0.81, 0.05, 0.1, 0.075])
+
+    btn_ack = Button(ax_ack, 'Acknowledge', color='green', hovercolor='#aec7e8')
+    btn_term = Button(ax_term, 'Terminate', color='red', hovercolor='#ff9896')
+
+    plt.subplots_adjust(top=0.95, bottom=0.2, left=0.1, right=0.9)  # Add more padding
+
+    def on_close(event):
+        print("Experiment terminated:")
+        print("Window closed manually.")
+        sys.exit()  # Ensure the script exits when closed manually
+
+    def terminate(event):
+        print("Experiment terminated.")
+        plt.close(fig)
+        sys.exit()
+
+    close_id = fig.canvas.mpl_connect('close_event', on_close)
+
+    def acknowledge(event):
+        print("Experiment acknowledged.")
+        fig.canvas.mpl_disconnect(close_id)
+        plt.close(fig)
+
+    btn_ack.on_clicked(acknowledge)
+    btn_term.on_clicked(terminate)
+
+    plt.show()
+
+def plot_exp_input_rpm(t_arr, J, rpm_sweep):
     fig, ax1 = plt.subplots(figsize = (12, 6))
     # plt.subplots_adjust(top=0.7, bottom=0.6)
 
@@ -442,3 +496,7 @@ def get_latest_file():
     latest_file = max(files, key=os.path.getctime)
     return latest_file
 
+def run_bias():
+    os.system('python J_sweep_bias.py')
+    time.sleep(2)
+    return get_latest_file()
