@@ -21,16 +21,17 @@ D_inch = 10 # Propeller Diameter
 D_m = D_inch * 0.0254 # Propeller diameter in meters
 pitch = 10 # Propeller Pitch
 
-num_ops = 6 # Number of operating points to be tested
+num_ops = 1 # Number of operating points to be tested
 J_min = 0.2
-J_max = 0.32
-station_time = 30 # seconds per operating point
+J_max = 0.2
+station_time = 400 # seconds per operating point
 
 #------------------------------ File Variables -----------------------------#
 prop_name = str(D_inch) + "x" + str(pitch)
 current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
 file_name = prop_name + "_J_" + str(J_min) + "_" + str(J_max) + "_" + current_time + ".mat"
-
+save_folder = "results/"
+save_dir = save_folder + prop_name + "/" + file_name
 
 # bias_file = get_latest_file()
 bias_file = run_bias()
@@ -223,6 +224,9 @@ finally:
 
 analog_force_in.stop()
 analog_mano_in.stop()
+
+# ----------------------------- Save Data ----------------------------- #
+
 data_force_daq = data_force_daq[:, 0:last_index_force]
 data_mano_daq = data_mano_daq[:, 0:last_index_mano]
 
@@ -237,7 +241,7 @@ plt.xlabel("Time [s]")
 plt.ylabel("RPM")
 plt.show()
 
-io.savemat("results/" + prop_name + "/" + file_name, 
+io.savemat(save_dir, 
             {"t": t_arr, 
                 "data": data_force_daq.T,
                 "data_mano": data_mano_daq.T,

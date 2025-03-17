@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 #------------------------------ Experiment Variables -----------------------------#
 WT = wind_tunnel()
-U_inf = 8 # m/s
+U_inf = 6 # m/s
 
 print("Reading WT temperature and pressure...")
 temperature, pressure = WT.read_PLC()
@@ -23,7 +23,7 @@ pitch = 5 # Propeller Pitch
 num_ops = 1 # Number of operating points to be tested
 J_min = 0.4
 J_max = 0.4
-station_time = 150 # seconds per operating point
+station_time = 200 # seconds per operating point
 
 #------------------------------ File Variables -----------------------------#
 prop_name = str(D_inch) + "x" + str(pitch)
@@ -84,7 +84,7 @@ z_l = z_d = signal.lfilter_zi(b, a)
 
 
 # #------------------------------ Define equipment classes -----------------------------#
-plot_exp_input(np.linspace(0, duration, N), J_sweep, rpm_sweep)
+plot_exp_input_rpm(np.linspace(0, duration, N), J_sweep, rpm_sweep)
 
 
 esc_1 = esc()

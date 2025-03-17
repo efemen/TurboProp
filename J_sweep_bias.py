@@ -27,7 +27,7 @@ description = "Propeller " + prop_name + " bias measurement."
 t_arr = np.zeros((1, 1))
 
 
-buffer_in_size = Fs_analog // Fs_control 
+buffer_in_size = 100
 # buff_t_arr = np.linspace(0, buffer_in_size/Fs_analog, buffer_in_size)
 channels = 8
 
