@@ -103,14 +103,23 @@ class analog_force_reader():
         self.stream = AnalogMultiChannelReader(self.task.in_stream)
 
 
-        self.cal_matrix = np.array([
-            [0.00371,  -0.02167,   0.00473,   3.15117,   0.02060,  -3.17213], # ATI Mini 40 IP66 calibration matrix SOTON BLWT, 12/02/2025
-            [0.00433,  -3.79734,  -0.01068,   1.75137,  -0.00602,   1.87770], 
-            [5.14105,  -0.08149,   5.23352,  -0.13159,   5.39405,  -0.12217],
-            [-0.00134,  -0.04024,   0.07490,   0.01583,  -0.07733,   0.02243], 
-            [-0.08373,   0.00302,   0.04110,  -0.03512,   0.04666,   0.03224],
-            [0.00106,  -0.04752,   0.00002,  -0.04370,  -0.00002,  -0.04564]])
+        # self.cal_matrix = np.array([
+        #     [0.00371,  -0.02167,   0.00473,   3.15117,   0.02060,  -3.17213], # ATI Mini 40 IP66, FT56924 calibration matrix SOTON BLWT, 12/02/2025
+        #     [0.00433,  -3.79734,  -0.01068,   1.75137,  -0.00602,   1.87770], 
+        #     [5.14105,  -0.08149,   5.23352,  -0.13159,   5.39405,  -0.12217],
+        #     [-0.00134,  -0.04024,   0.07490,   0.01583,  -0.07733,   0.02243], 
+        #     [-0.08373,   0.00302,   0.04110,  -0.03512,   0.04666,   0.03224],
+        #     [0.00106,  -0.04752,   0.00002,  -0.04370,  -0.00002,  -0.04564]])
                                         
+        self.cal_matrix = np.array([
+            [0.00620,   0.07157,   0.84050,  12.70886,  -0.52398, -11.83592], # ATI Mini 40, FT47790 calibration matrix SOTON BLWT, 23/03/2025
+            [-0.41651, -14.70327, 0.63536, 7.34283, 0.26233, 6.89303], 
+            [20.82344, -0.06424, 20.90322, 0.60811, 21.03796, -0.02464],
+            [-0.00570, -0.08270, 0.29727, 0.04899, -0.29664, 0.03775], 
+            [-0.33797, 0.00221, 0.16560, -0.06711, 0.17786, 0.06643],
+            [-0.00465, -0.17603, -0.00794, -0.17881, -0.00924, -0.16388]])    
+        
+
     def start(self):
         self.task.start()
 
@@ -283,11 +292,35 @@ def ask_user(in_string):
     running = False
 
 
+def estimate_rpm(signal, Fs):
+    # Find indices where the signal transitions from low to high (rising edges)
+    # rising_edges = np.where((signal[:-1] < 3.5) & (signal[1:] >= 3.5))[0] + 1
+    time_arr = np.linspace(0, len(signal) / Fs, len(signal))
+    threshold = 2 # V
+    indices = np.where(np.diff(signal) > threshold)[0]
+    
+    if len(indices) < 2:
+        return 0
+    
+    min_gap = 20  # Adjust based on your data (e.g., number of samples)
+    filtered_indices = indices[np.insert(np.diff(indices) > min_gap, 0, True)]
+
+    rising_edges = time_arr[filtered_indices]
+
+    # Compute time differences between rising edges
+    time_diff = np.diff(rising_edges)[-1]
+
+    # Compute average time between rising edges
+    # avg_time = np.mean(time_diffs)
+    rpm = 60 / time_diff
+    return rpm
+
+
 # def estimate_rpm(signal, Fs):
 #     # Find indices where the signal transitions from low to high (rising edges)
-#     # rising_edges = np.where((signal[:-1] < 3.5) & (signal[1:] >= 3.5))[0] + 1
 #     time_arr = np.linspace(0, len(signal) / Fs, len(signal))
-#     threshold = 2 # V
+#     threshold = 1 # V
+#     signal = np.where(signal > threshold, 5, signal)
 #     indices = np.where(np.diff(signal) > threshold)[0]
     
 #     if len(indices) < 2:
@@ -305,30 +338,6 @@ def ask_user(in_string):
 #     # avg_time = np.mean(time_diffs)
 #     rpm = 60 / time_diff
 #     return rpm
-
-
-def estimate_rpm(signal, Fs):
-    # Find indices where the signal transitions from low to high (rising edges)
-    time_arr = np.linspace(0, len(signal) / Fs, len(signal))
-    threshold = 1 # V
-    signal = np.where(signal > threshold, 5, signal)
-    indices = np.where(np.diff(signal) > threshold)[0]
-    
-    if len(indices) < 2:
-        return 0
-    
-    min_gap = 1  # Adjust based on your data (e.g., number of samples)
-    filtered_indices = indices[np.insert(np.diff(indices) > min_gap, 0, True)]
-
-    rising_edges = time_arr[filtered_indices]
-
-    # Compute time differences between rising edges
-    time_diff = np.diff(rising_edges)[-1]
-
-    # Compute average time between rising edges
-    # avg_time = np.mean(time_diffs)
-    rpm = 60 / time_diff
-    return rpm
 
 def J2RPM(J, V, D):
     n = V / (J*D)
@@ -476,14 +485,21 @@ def plot_exp_input_rpm(t_arr, J, rpm_sweep):
 
 class cal_matrix():
     def __init__(self):
+            # self.cal_matrix = np.array([
+            # [0.00371,  -0.02167,   0.00473,   3.15117,   0.02060,  -3.17213], # ATI Mini 40 IP66 calibration matrix SOTON BLWT, 12/02/2025
+            # [0.00433,  -3.79734,  -0.01068,   1.75137,  -0.00602,   1.87770], 
+            # [5.14105,  -0.08149,   5.23352,  -0.13159,   5.39405,  -0.12217],
+            # [-0.00134,  -0.04024,   0.07490,   0.01583,  -0.07733,   0.02243], 
+            # [-0.08373,   0.00302,   0.04110,  -0.03512,   0.04666,   0.03224],
+            # [0.00106,  -0.04752,   0.00002,  -0.04370,  -0.00002,  -0.04564]])
             self.cal_matrix = np.array([
-            [0.00371,  -0.02167,   0.00473,   3.15117,   0.02060,  -3.17213], # ATI Mini 40 IP66 calibration matrix SOTON BLWT, 12/02/2025
-            [0.00433,  -3.79734,  -0.01068,   1.75137,  -0.00602,   1.87770], 
-            [5.14105,  -0.08149,   5.23352,  -0.13159,   5.39405,  -0.12217],
-            [-0.00134,  -0.04024,   0.07490,   0.01583,  -0.07733,   0.02243], 
-            [-0.08373,   0.00302,   0.04110,  -0.03512,   0.04666,   0.03224],
-            [0.00106,  -0.04752,   0.00002,  -0.04370,  -0.00002,  -0.04564]])
-        
+            [0.00620,   0.07157,   0.84050,  12.70886,  -0.52398, -11.83592], # ATI Mini 40, FT47790 calibration matrix SOTON BLWT, 23/03/2025
+            [-0.41651, -14.70327, 0.63536, 7.34283, 0.26233, 6.89303], 
+            [20.82344, -0.06424, 20.90322, 0.60811, 21.03796, -0.02464],
+            [-0.00570, -0.08270, 0.29727, 0.04899, -0.29664, 0.03775], 
+            [-0.33797, 0.00221, 0.16560, -0.06711, 0.17786, 0.06643],
+            [-0.00465, -0.17603, -0.00794, -0.17881, -0.00924, -0.16388]])  
+            
     def voltage2force(self, raw):
         # raw is a 6x1 numpy array
         # Conversion from voltage to force in Newtons

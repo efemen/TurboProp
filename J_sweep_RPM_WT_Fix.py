@@ -21,10 +21,11 @@ D_inch = 10 # Propeller Diameter
 D_m = D_inch * 0.0254 # Propeller diameter in meters
 pitch = 5 # Propeller Pitch
 
-num_ops = 3 # Number of operating points to be tested
-J_min = 0.12
-J_max = 0.16
-station_time = 30 # seconds per operating point
+num_ops = 4 # Number of operating points to be tested
+J_min = 0.42
+J_max = 0.48
+
+station_time = 40 # seconds per operating point
 
 #------------------------------ File Variables -----------------------------#
 prop_name = str(D_inch) + "x" + str(pitch)
@@ -101,7 +102,7 @@ z_l = z_d = signal.lfilter_zi(b, a)
 
 
 # #------------------------------ Define equipment classes -----------------------------#
-plot_exp_input_rpm(np.linspace(0, duration, N), J_sweep, rpm_sweep)
+# plot_exp_input_rpm(np.linspace(0, duration, N), J_sweep, rpm_sweep)
 
 
 esc_1 = esc()
@@ -110,7 +111,7 @@ esc_1.start()
 # WT.set_U0(U_inf)
 print("Wind tunnel starting...")
 WT.set_fan_speed(8.5)
-# WT.set_fan_speed(12.7)
+# WT.set_fan_speed(12.8)
 
 time.sleep(20)
 
@@ -221,16 +222,18 @@ data_mano_daq = data_mano_daq[:, 0:last_index_mano]
 
 force_raw = analog_force_in.raw2force(data_force_daq[0:6, :]).T
 
-import matplotlib.pyplot as plt
-fig, ax = plt.subplots()
+# import matplotlib.pyplot as plt
+# fig, ax = plt.subplots()
 
-ax.plot(t_arr, rpms, ".-")
-plt.grid()
-plt.xlabel("Time [s]")
-plt.ylabel("RPM")
-plt.show()
+# ax.plot(t_arr, rpms, ".-")
+# plt.grid()
+# plt.xlabel("Time [s]")
+# plt.ylabel("RPM")
+# plt.show()
 
-ask_user("Is the tunnel stopped?")
+# ask_user("Is the tunnel stopped?")
+time.sleep(25)
+
 post_bias_file = run_bias()
 print("Bias file: ", post_bias_file)
 bias_data_post = io.loadmat(post_bias_file)
@@ -261,6 +264,7 @@ io.savemat(save_dir,
                 "bias_mean_post" : bias_mean_post,
                 "bias_file" : pre_bias_file,
                 "bias_file_post" : post_bias_file,
+                "turbulence_case" : turbulence_case,
                 "description" : description})
 print("Data saved.")
 print("Bias shift = ", (bias_mean_post - bias_mean) / bias_mean * 100, "%")

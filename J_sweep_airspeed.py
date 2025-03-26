@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 #------------------------------ Experiment Variables -----------------------------#
 WT = wind_tunnel()
 # U_inf = 6 # m/s
-RPM = 6000
+RPM = 4000
 
 print("Reading WT temperature and pressure...")
 temperature, pressure = WT.read_PLC()
@@ -18,13 +18,13 @@ rho = air_density(temperature, pressure, humidty) * 100 # Air density
 # q_target = 0.5 * rho * U_inf**2
 # print("Target q = ", str(q_target))
 
-D_inch = 10 # Propeller Diameter
+D_inch = 16 # Propeller Diameter
 D_m = D_inch * 0.0254 # Propeller diameter in meters
-pitch = 5 # Propeller Pitch
+pitch = 8 # Propeller Pitch
 
-num_ops = 6 # Number of operating points to be tested
-J_min = 0.2
-J_max = 0.32
+num_ops = 4 # Number of operating points to be tested
+J_min = 0.10
+J_max = 0.16
 station_time = 30 # seconds per operating point
 
 #------------------------------ File Variables -----------------------------#
@@ -113,7 +113,7 @@ esc_1 = esc()
 esc_1.start()
 
 # WT.set_U0(U_inf)
-# wt_controller.u = round(WT.fit[0] * U_inf + WT.fit[1], 1)
+wt_controller.u = round(WT.fit[0] * U_inf + WT.fit[1], 1)
 
 WT.set_fan_speed(17.5)
 wt_controller.u = 17.5
@@ -245,15 +245,13 @@ io.savemat("results/" + prop_name + "/" + file_name,
                 "force": force_raw,
                 "force_net": force_raw - bias_mean,
                 "rpm": rpms, 
-                "rpm_command": rpm_commands,
                 "Fs_analog" : Fs_analog, 
                 "Fs_control" : Fs_control, 
                 "kp_indi" : kp_indi,
                 "J_sweep" : J_sweep,
-                "rpm_sweep" : rpm_sweep,
                 "D_inch" : D_inch,
                 "pitch" : pitch,
-                "U_inf" : U_inf,
+                "U_infs" : U_infs,
                 "temperature" : temperature,
                 "pressure" : pressure,
                 "humidity" : humidty,
