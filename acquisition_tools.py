@@ -292,11 +292,35 @@ def ask_user(in_string):
     running = False
 
 
+# def estimate_rpm(signal, Fs):
+#     # Find indices where the signal transitions from low to high (rising edges)
+#     # rising_edges = np.where((signal[:-1] < 3.5) & (signal[1:] >= 3.5))[0] + 1
+#     time_arr = np.linspace(0, len(signal) / Fs, len(signal))
+#     threshold = 2 # V
+#     indices = np.where(np.diff(signal) > threshold)[0]
+    
+#     if len(indices) < 2:
+#         return 0
+    
+#     min_gap = 15  # Adjust based on your data (e.g., number of samples)
+#     filtered_indices = indices[np.insert(np.diff(indices) > min_gap, 0, True)]
+
+#     rising_edges = time_arr[filtered_indices]
+
+#     # Compute time differences between rising edges
+#     time_diff = np.diff(rising_edges)[-1]
+
+#     # Compute average time between rising edges
+#     # avg_time = np.mean(time_diffs)
+#     rpm = 60 / time_diff
+#     return rpm
+
+
 def estimate_rpm(signal, Fs):
     # Find indices where the signal transitions from low to high (rising edges)
-    # rising_edges = np.where((signal[:-1] < 3.5) & (signal[1:] >= 3.5))[0] + 1
     time_arr = np.linspace(0, len(signal) / Fs, len(signal))
-    threshold = 2 # V
+    threshold = 1 # V
+    signal = np.where(signal > threshold, 5, signal)
     indices = np.where(np.diff(signal) > threshold)[0]
     
     if len(indices) < 2:
@@ -314,30 +338,6 @@ def estimate_rpm(signal, Fs):
     # avg_time = np.mean(time_diffs)
     rpm = 60 / time_diff
     return rpm
-
-
-# def estimate_rpm(signal, Fs):
-#     # Find indices where the signal transitions from low to high (rising edges)
-#     time_arr = np.linspace(0, len(signal) / Fs, len(signal))
-#     threshold = 1 # V
-#     signal = np.where(signal > threshold, 5, signal)
-#     indices = np.where(np.diff(signal) > threshold)[0]
-    
-#     if len(indices) < 2:
-#         return 0
-    
-#     min_gap = 1  # Adjust based on your data (e.g., number of samples)
-#     filtered_indices = indices[np.insert(np.diff(indices) > min_gap, 0, True)]
-
-#     rising_edges = time_arr[filtered_indices]
-
-#     # Compute time differences between rising edges
-#     time_diff = np.diff(rising_edges)[-1]
-
-#     # Compute average time between rising edges
-#     # avg_time = np.mean(time_diffs)
-#     rpm = 60 / time_diff
-#     return rpm
 
 def J2RPM(J, V, D):
     n = V / (J*D)

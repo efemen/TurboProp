@@ -264,7 +264,6 @@ io.savemat(save_dir,
                 "bias_mean_post" : bias_mean_post,
                 "bias_file" : pre_bias_file,
                 "bias_file_post" : post_bias_file,
-                "turbulence_case" : turbulence_case,
                 "description" : description})
 print("Data saved.")
 print("Bias shift = ", (bias_mean_post - bias_mean) / bias_mean * 100, "%")

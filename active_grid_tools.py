@@ -11,7 +11,8 @@ class active_grid():
         self.com_port = "COM4"
         self.baud_rate = 9600
         self.matlab_script = "C:/Users/Lab7/Desktop/Users/dwc/Active_Grid_Scripts/Active_Grid_Scripts/run_test.m"  # Replace with the correct path to your .m file
-    
+        self.matlab_script_shear = "C:/Users/Lab7/Desktop/Users/dwc/Active_Grid_Scripts/Active_Grid_Scripts/oscillate_motors_position.m"
+
     def go_home(self):
         # Open the serial port
         self.ser = serial.Serial(self.com_port, self.baud_rate)
@@ -64,6 +65,32 @@ class active_grid():
         
         # Create the command to run the MATLAB script
         command = [matlab_executable, '-batch', f"run('{self.matlab_script}')"]
+
+        # Run the MATLAB script via subprocess
+        print("Running MATLAB script...")
+        self.process = subprocess.Popen(command)
+
+    def run_shear_case(self, case_number):
+        if case_number not in range(1, 5):
+            print("Invalid case number.")
+            return
+        
+        matlab_executable = 'matlab'  # Or use 'matlab -batch' for newer versions
+
+        with open(self.matlab_script_shear, "r") as file:
+            lines = file.readlines()
+
+        with open(self.matlab_script_shear, "w") as file:
+            for line in lines:
+                if "load" in line:
+                    file.write(f"load('Efe_ShearCase{case_number+2}.mat');\n")
+                else:
+                    file.write(line)
+
+        time.sleep(1)
+        
+        # Create the command to run the MATLAB script
+        command = [matlab_executable, '-batch', f"run('{self.matlab_script_shear}')"]
 
         # Run the MATLAB script via subprocess
         print("Running MATLAB script...")

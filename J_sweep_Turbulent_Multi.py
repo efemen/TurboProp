@@ -2,8 +2,10 @@ import numpy as np
 import subprocess
 
 
-J_mins = np.array([0.16, 0.2, 0.24, 0.28, .32, .36, .40, .44, .48, .52, .56, .60])
-# J_mins = np.array([.32, .36, .40, .44, .48, .52, .56, .60])
+J_mins = np.array([0.16, 0.2, 0.24, 0.28, .32, .36, .40, .44, .48, .52, .56])
+# J_mins = np.array([.40, .44, .48, .52, .56, .60])
+# J_mins = np.array([.15, 0.19, 0.23, 0.27, 0.31, 0.35])
+# J_mins = np.array([0.16, 0.13,])
 J_maxs = np.round(J_mins + 0.02, 2)
 
 print(J_mins)

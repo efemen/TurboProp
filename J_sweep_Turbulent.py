@@ -7,7 +7,7 @@ from active_grid_tools import active_grid
 
 #------------------------------ Experiment Variables -----------------------------#
 U_inf = 6 # m/s
-turbulence_case = 4
+turbulence_case = 0
 
 WT = wind_tunnel()
 
@@ -23,23 +23,30 @@ if turbulence_case != 0:
     ag = active_grid()
     ag.go_home()
 
-D_inch = 10 # Propeller Diameter
+D_inch = 16 # Propeller Diameter
 D_m = D_inch * 0.0254 # Propeller diameter in meters
-pitch = 10 # Propeller Pitch
+pitch = 8 # Propeller Pitch
 
 num_ops = 2 # Number of operating points to be tested
-J_min = 0.16
-J_max = 0.18
+J_min = 0.18
+J_max = 0.6
 
-station_time = 132 # seconds per operating point
+station_time = 60 # seconds per operating point
 
 #------------------------------ File Variables -----------------------------#
 prop_name = str(D_inch) + "x" + str(pitch)
 current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
 file_name = prop_name + "_J_" + str(J_min) + "_" + str(J_max) + "_" + current_time + ".mat"
-save_folder = "results/Turbulent/Case_" + str(turbulence_case) + "/"
-save_dir = save_folder + prop_name + "/" + file_name
-# save_dir = save_folder + file_name
+# file_name = "audio_grid_flow_8ms_case" + str(turbulence_case) + ".mat"
+
+# save_folder = "results/Turbulent/Case_" + str(turbulence_case) + "/"
+save_folder = "results/audio/WT_Clean/"
+# save_folder = "D:/Efe/TurboProp/results/Shear/Shear_Case"  + str(turbulence_case) + "/"
+# save_folder = "results/Shear/Shear_Case/" + str(turbulence_case) + "/"
+
+# save_dir = save_folder + prop_name + "/" + file_name
+
+save_dir = save_folder + file_name
 
 # bias_file = get_latest_file()
 pre_bias_file = run_bias()
@@ -49,6 +56,7 @@ bias_mean = bias_data["mean_force"]
 
 t = 0
 datapoint = 0
+analog_datapoint = 0
 Fs_analog = 20000 # Hz
 Fs_control = 20 # Hz
 Fs_mano = 1000 # Hz
@@ -117,7 +125,7 @@ esc_1.start()
 # WT.set_U0(U_inf)
 print("Wind tunnel starting...")
 
-# WT.set_fan_speed(8.5) # Clean 6 m/s
+WT.set_fan_speed(8.5) # Clean 6 m/s
 # WT.set_fan_speed(12.8) # Clean 8 m/s
 
 # WT.set_fan_speed(11) # Case 0, Turbulent 6 m/s
@@ -132,12 +140,16 @@ print("Wind tunnel starting...")
 # WT.set_fan_speed(13) # Case 3, Turbulent 6 m/s
 # WT.set_fan_speed(19) # Case 3, Turbulent 8 m/s
 
-WT.set_fan_speed(12.7) # Case 4, Turbulent 6 m/s
+# WT.set_fan_speed(13) # Case 4, Turbulent 6 m/s
 # WT.set_fan_speed(18.8) # Case 4, Turbulent 8 m/s
 
+# WT.set_fan_speed(19) # Shear Case 1, Turbulent 8 m/s
+# WT.set_fan_speed(19) # Shear Case 2, Turbulent 8 m/s
+# WT.set_U0(10) # Shear Case Characterized Speed, Turbulent 8 m/s
 
 if turbulence_case != 0:
-    ag.run_case(turbulence_case)
+    # ag.run_case(turbulence_case)
+    ag.run_shear_case(turbulence_case)
 
 time.sleep(20)
 
@@ -206,7 +218,7 @@ try:
         # Do whatever you want here:
 
         # Estimate RPM
-        rpm = estimate_rpm(data_force_daq[6, :], Fs_analog)
+        rpm = estimate_rpm(data_force_daq[6, analog_datapoint-20000:analog_datapoint+20000], Fs_analog)
         rpms = np.append(rpms, rpm)
         rpm_filtered, z_l = signal.lfilter(b, a, rpms, zi=z_l)
 
@@ -215,11 +227,12 @@ try:
         controller.set_command(rpm_commands[datapoint])
         esc_1.write_throttle(throttle_command)
 
-        # WT control
-        if datapoint % 10  == 0 and datapoint > 30:
-            print("RPM: ", rpm_filtered[datapoint], "Error: ", controller.error, "Throttle: ", throttle_command)
+
+        if datapoint % 20  == 0 and datapoint > 30:
+            print(f"t = {t:.4f} s, RPM: {rpms[datapoint]:.4f}, Error: {controller.error:.4f}, Throttle: {100*throttle_command:.4f}%")
 
         datapoint += 1
+        analog_datapoint += int(1 * Fs_analog // Fs_control)
         if datapoint >= N:
             break
         target_time = start_time + (datapoint * dt_control)

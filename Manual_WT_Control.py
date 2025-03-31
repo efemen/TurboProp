@@ -9,6 +9,6 @@ U_inf = 8 # m/s
 # WT.set_fan_speed(22.5)
 # WT.set_fan_speed(13)
 WT.set_fan_speed(0)
-# WT.set_fan_speed(18.8)
+# WT.set_fan_speed(19)
 
 WT.close()
